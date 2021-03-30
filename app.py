@@ -1,10 +1,5 @@
 import os
-from flask import (
-    Flask,
-    request,
-    abort,
-    jsonify
-    )
+from flask import Flask, request, abort, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from models import setup_db, Actor, Movie, rollback
@@ -25,42 +20,41 @@ def create_app(test_config=None):
 
   @app.route('/actors', methods=['GET'])
   @requires_auth('get:actors')
-  def get_actor(payload):
+  def get_actor(jwk):
     actors = Actor.query.all()
     Actor = [actor.format() for actor in actors]
     return jsonify({
       "success": True,
-      "actors": Actor
+      "actors": [actor.format() for actor in actors]
     }), 200
 
 
   @app.route('/actors', methods=['POST'])
   @requires_auth('post:actors')
-  def post_actor(payload):
+  def post_actor(jwk):
     body = request.get_json()
     name = body.get('name')
     age = body.get('age')
     gender = body.get('gender')
 
     if ((age is None) or (name is None) or (gender is None)):
-      abort(522)
+      abort(400)
     
     try:
       the_actor = Actor(name=name, age=age, gender=gender)
       the_actor.insert()
 
-      return jsonify({
-        "success": True,
-        "created": the_actor.id
-      }), 200
     except Exception:
       abort(500)
   
-
+    return jsonify({
+      "success": True,
+      "created": the_actor.id
+    }), 200
 
   @app.route('/actors/<int:id>', methods=['GET'])
   @requires_auth('get:actors')
-  def get_actor_by_id(payload, id):
+  def get_actor_by_id(jwk, id):
     actors = Actor.query.get(id)
     if actors is None:
       abort(404)
@@ -74,9 +68,9 @@ def create_app(test_config=None):
 
   @app.route('/actors/<int:id>', methods = ['PATCH'])
   @requires_auth('patch:actor')
-  def patch_the_actor(payload, id):
+  def patch_the_actor(jwk, id):
     body = request.get_json()
-    actor = Actor.query.all()
+    actor = Actor.query.get(id)
 
     if actor is None:
       abort(404)
@@ -97,20 +91,20 @@ def create_app(test_config=None):
         actor.gender = gender
 
       actor.update()
-
-      return jsonify({
-        "success": True,
-        "actor": actor.format()
-      }), 200
     except Exception:
       rollback()
       abort(422)
+
+    return jsonify({
+      "success": True,
+      "actor": [actor.format()]
+    }), 200
   
 
 
   @app.route('/actors/<int:id>', methods=['DELETE'])
   @requires_auth('delete:actor')
-  def delete_actor(payload, id):
+  def delete_actor(jwk, id):
     actor = Actor.query.get(id)
 
     if actor is None:
@@ -122,13 +116,18 @@ def create_app(test_config=None):
       rollback()
       abort(500)
 
+    return jsonify({
+      "success": True,
+      "movies": [actor.format()]
+    }), 200
+
   
   # here I want to setup the movie actions 
 
 
   @app.route('/movies', methods=['GET'])
   @requires_auth('get:movies')
-  def get_movie(payload):
+  def get_movie(jwk):
     movies = Movie.query.all()
     return jsonify({
       "success": True,
@@ -139,7 +138,7 @@ def create_app(test_config=None):
 
   @app.route('/movies/<int:id>', methods=['GET'])
   @requires_auth('get:movies')
-  def get_movie_by_id(payload, id):
+  def get_movie_by_id(jwk, id):
     movie = Movie.query.get(id)
 
     if movie is None:
@@ -150,10 +149,10 @@ def create_app(test_config=None):
     }), 200
   
 
-
+  
   @app.route('/movies', methods=['POST'])
   @requires_auth('post:movie')
-  def post_movie(payload):
+  def post_movie(jwk):
     body = request.get_json()
 
     title = body.get('title')
@@ -170,16 +169,13 @@ def create_app(test_config=None):
 
       return jsonify({
         "success": True,
-        "created_movie": the_movie.format()
-      }), 200
+        "created_movie": the_movie.format()}), 200
     except Exception:
       abort(500)
 
-
-
   @app.route('/movies/<int:id>', methods=['PATCH'])
   @requires_auth('patch:movie')
-  def patch_movie(payload, id):
+  def patch_movie(jwk, id):
     body = request.get_json()
     movie = Movie.query.get(id)
 
@@ -204,11 +200,9 @@ def create_app(test_config=None):
         "movie": movie.format()
       }), 200
 
-
-
   @app.route('/movies/<int:id>', methods=['DELETE'])
   @requires_auth('delete:movie')
-  def delete_movie(payload, id):
+  def delete_movie(jwk, id):
     movie = Movie.query.get(id)
 
     if movie is None:
@@ -221,7 +215,7 @@ def create_app(test_config=None):
       abort(500)
     return jsonify({
       "success": True,
-      "deleted": movie.id
+      "deleted": movie.format()
       }), 200
 
 
@@ -277,13 +271,6 @@ def create_app(test_config=None):
           "message": "Internal server error"
         }), 500
 
-    @app.errorhandler(AuthError)
-    def authentication_error(error):
-        return jsonify({
-          "success": False,
-          "error": error.status_code,
-          "message": error.error
-        }), error.status_code
   return app
 
 APP = create_app()
